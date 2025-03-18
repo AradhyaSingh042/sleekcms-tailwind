@@ -1,59 +1,52 @@
-import postcss from 'postcss';
-import tailwindcss from 'tailwindcss';
-import tailwindTypography from '@tailwindcss/typography';
-import tailwindForms from '@tailwindcss/forms';
-import tailwindAspectRatio from '@tailwindcss/aspect-ratio';
-import tailwindContainerQueries from '@tailwindcss/container-queries';
-import fs from 'fs/promises';
+import { compile } from "@tailwindcss/node"; 
+import { Scanner } from '@tailwindcss/oxide'
+import fs from "fs/promises";
 
-interface TailwindConfig {
-  [key: string]: any;
-}
-
-async function generateTailwindCSS(
-  tailwindConfig: TailwindConfig = {},
-  content: string
-): Promise<string> {
-
-  // Base CSS input with Tailwind directives
-  const cssInput = `
-    @tailwind base;
-    @tailwind components;
-    @tailwind utilities;
+async function generateTailwindCSS(content: string): Promise<string> {
+  const baseCSS = `
+    @import "tailwindcss";
+    @plugin "@tailwindcss/typography";
+    @plugin "@tailwindcss/forms";
+    @plugin "@tailwindcss/aspect-ratio";
+    @plugin "@tailwindcss/container-queries";
+    
+    @theme {
+      --color-avocado-100: oklch(0.99 0 0);
+      --color-avocado-200: oklch(0.98 0.04 113.22);
+      --color-avocado-300: oklch(0.94 0.11 115.03);
+    }
   `;
 
-  let { base, ...config } = tailwindConfig;
-  if (!base || base.trim().length < 10) base = cssInput;
+  try {
+    const compiler = await compile(baseCSS, {
+      base: process.cwd(),      
+      onDependency: (path) => {},
+    });
 
-  // Merge the plugins with the tailwindConfig
-  const configWithPlugins = {
-    ...config,
-    plugins: [
-      ...(tailwindConfig.plugins || []),
-      tailwindTypography,
-      tailwindForms,
-      tailwindAspectRatio,
-      tailwindContainerQueries,
-    ],
-    content: [{ raw: content, extension: 'html' }],
-  };
+    // Initialize scanner with raw content
+    const scanner = new Scanner({});
+    const candidates = scanner.scanFiles([{
+      content: content,
+      extension: "html",
+    }]);
 
-  // Process the CSS using PostCSS and Tailwind CSS
-  const result = await postcss([
-    tailwindcss(configWithPlugins),
-  ]).process(base, { from: undefined });
-
-  return result.css;
+    // Generate CSS
+    const compiledCSS = compiler.build(candidates);
+    return compiledCSS;
+  } catch (error) {
+    console.error("Compilation failed:", error);
+    throw error;
+  }
 }
 
 async function main() {
-    try {
-      const content = await fs.readFile('test.html', 'utf-8');
-      const css = await generateTailwindCSS({}, content);
-      console.log(css);
-    } catch (error) {
-      console.error('Error reading file or generating CSS:', error);
-    }
+  try {
+    const content = await fs.readFile("test.html", "utf-8");
+    const css = await generateTailwindCSS(content);
+    console.log(css);
+  } catch (error) {
+    console.error("Error:", error);
   }
-  
-  main();
+}
+
+main();
